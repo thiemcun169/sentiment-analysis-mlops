@@ -1,7 +1,8 @@
 name: sentiment-analysis
+
 services:
   triton-server:
-    image: nvcr.io/nvidia/tritonserver:23.09-py3
+    image: nvcr.io/nvidia/tritonserver:24.05-py3
     container_name: triton-server
     restart: unless-stopped
     ports:
@@ -27,12 +28,15 @@ services:
       --log-verbose=1
       --strict-model-config=false
       --exit-on-error=false
+      --backend-config=tensorrt,enable-nvtx=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
+    networks:
+      - sentiment-net
 
   fastapi-service:
     build:
@@ -45,12 +49,24 @@ services:
     environment:
       - TRITON_SERVER_URL=triton-server:8001
       - MODEL_NAME=sentiment_analysis_tensorrt
-      - MAX_BATCH_SIZE=32
+      - MAX_BATCH_SIZE=4
+      - LOG_LEVEL=INFO
     depends_on:
-      - triton-server
+      triton-server:
+        condition: service_healthy
     volumes:
+      - ./triton-model-repository:/app/triton-model-repository:ro
       - ./logs:/app/logs
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    networks:
+      - sentiment-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
 
 networks:
-  default:
+  sentiment-net:
     driver: bridge 
