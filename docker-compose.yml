@@ -1,0 +1,56 @@
+name: sentiment-analysis
+services:
+  triton-server:
+    image: nvcr.io/nvidia/tritonserver:23.09-py3
+    container_name: triton-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # HTTP
+      - "8001:8001"  # GRPC
+      - "8002:8002"  # Metrics
+    volumes:
+      - ./triton-model-repository:/models
+      - /tmp/triton-cache:/tmp/triton-cache
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      tritonserver --model-repository=/models
+      --allow-gpu-metrics=true
+      --allow-cpu-metrics=true
+      --log-verbose=1
+      --strict-model-config=false
+      --exit-on-error=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  fastapi-service:
+    build:
+      context: ./fastapi-service
+      dockerfile: Dockerfile
+    container_name: sentiment-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - TRITON_SERVER_URL=triton-server:8001
+      - MODEL_NAME=sentiment_analysis_tensorrt
+      - MAX_BATCH_SIZE=32
+    depends_on:
+      - triton-server
+    volumes:
+      - ./logs:/app/logs
+
+networks:
+  default:
+    driver: bridge 

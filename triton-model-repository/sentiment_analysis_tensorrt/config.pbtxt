@@ -1,0 +1,43 @@
+name: "sentiment_analysis_tensorrt"
+platform: "tensorrt_plan"
+max_batch_size: 32
+version_policy { all { }}
+default_model_filename: "model.plan"
+
+input [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+    reshape { shape: [ -1, 512 ] }
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+    reshape { shape: [ -1, 512 ] }
+  }
+]
+
+output [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [ 2 ]
+  }
+]
+
+# Dynamic batching for improved throughput
+dynamic_batching {
+  preferred_batch_size: [ 4, 8, 16 ]
+  max_queue_delay_microseconds: 100
+}
+
+# Instance configuration for GPU
+instance_group [
+  {
+    count: 1
+    kind: KIND_GPU
+    gpus: [ 0 ]
+  }
+] 
